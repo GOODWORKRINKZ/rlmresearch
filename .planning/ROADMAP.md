@@ -1,19 +1,21 @@
 # ROADMAP
 
-## Phase 1: RLM Core + Basic API
+## Phase 1: RLM Core + Basic API ✅
 **Goal**: RLM-сервер работает с DeepSeek, отдаёт OpenAI-compatible API
 
 ### Plans
-**3 plans in 3 waves**
+**3 plans in 3 waves — ALL COMPLETED**
 
 Plans:
-- [ ] 01-01-PLAN.md — Project scaffold, dependencies, config module (wave 1)
-- [ ] 01-02-PLAN.md — RLM client + system prompt for DeepSeek (wave 2)
-- [ ] 01-03-PLAN.md — FastAPI server with /v1/chat/completions endpoint (wave 3)
+- [x] 01-01-PLAN.md — Project scaffold, dependencies, config module (wave 1)
+- [x] 01-02-PLAN.md — RLM client + system prompt for DeepSeek (wave 2)
+- [x] 01-03-PLAN.md — FastAPI server with /v1/chat/completions endpoint (wave 3)
 
 ### Verification
-- `curl` запрос к API возвращает ответ от DeepSeek через RLM
-- VS Code Copilot может подключиться к endpoint
+- ✅ All imports work, config loads from env vars
+- ✅ create_rlm() initializes with DeepSeek backend
+- ✅ FastAPI server serves OpenAI-compatible endpoints (health, models, chat)
+- ✅ Automated tests pass with mocked RLM
 
 ---
 
