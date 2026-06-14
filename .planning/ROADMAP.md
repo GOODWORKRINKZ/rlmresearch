@@ -4,10 +4,12 @@
 **Goal**: RLM-сервер работает с DeepSeek, отдаёт OpenAI-compatible API
 
 ### Plans
-1. **[P1.1] Project setup** — структура проекта, зависимости, конфиг
-2. **[P1.2] RLM backend for DeepSeek** — кастомный backend через OpenAI-compatible API
-3. **[P1.3] FastAPI server** — `/v1/chat/completions` endpoint
-4. **[P1.4] Basic system prompt** — dev assistant prompt для RLM
+**3 plans in 3 waves**
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold, dependencies, config module (wave 1)
+- [ ] 01-02-PLAN.md — RLM client + system prompt for DeepSeek (wave 2)
+- [ ] 01-03-PLAN.md — FastAPI server with /v1/chat/completions endpoint (wave 3)
 
 ### Verification
 - `curl` запрос к API возвращает ответ от DeepSeek через RLM
