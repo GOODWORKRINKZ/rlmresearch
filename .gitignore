@@ -16,8 +16,8 @@ build/
 venv/
 env/
 
-# RLM / Planning
-.planning/
+# RLM planning temp files
+.planning/*.tmp
 
 # OS
 .DS_Store
