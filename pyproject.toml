@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rlm-assistant"
+version = "0.1.0"
+description = "RLM-powered dev assistant with OpenAI-compatible API"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    "rlms",
+    "fastapi",
+    "uvicorn[standard]",
+    "openai",
+    "python-dotenv",
+    "pydantic",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+]
+
+[project.scripts]
+rlm-serve = "rlm_assistant.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
