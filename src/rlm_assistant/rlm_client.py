@@ -6,7 +6,7 @@ from typing import Optional
 from rlm import RLM
 
 from rlm_assistant.config import get_settings, Settings
-from rlm_assistant.system_prompt import DEV_SYSTEM_PROMPT
+from rlm_assistant.system_prompt import DEV_USER_PROLOGUE
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ def create_rlm(settings: Optional[Settings] = None) -> RLM:
     rlm = RLM(
         backend="openai",
         backend_kwargs=settings.rlm_backend_kwargs,
-        custom_system_prompt=DEV_SYSTEM_PROMPT,
+        user_prologue=DEV_USER_PROLOGUE,
         verbose=settings.rlm_verbose,
         persistent=settings.rlm_persistent,
         compaction=settings.rlm_compaction,
