@@ -1,27 +1,45 @@
-"""FastAPI server with OpenAI-compatible endpoints."""
+"""FastAPI server with OpenAI-compatible endpoints.
+
+Two response paths:
+1. **Tool-calling path** (tools in request): Direct OpenAI API call → returns tool_calls
+2. **RLM path** (no tools): RLM orchestrator → returns text response
+
+When VS Code sends tool results back, we build context and use RLM to synthesize
+the final answer.
+"""
 
 import json
 import logging
 import time
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
+import openai
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from rlm_assistant.config import get_settings
-from rlm_assistant.rlm_client import chat, get_rlm
 
 logger = logging.getLogger(__name__)
 
 # --- Pydantic models ---
 
 
+class ToolCall(BaseModel):
+    """OpenAI-format tool call."""
+    id: str
+    type: str = "function"
+    function: dict[str, Any]
+
+
 class ChatMessage(BaseModel):
+    """OpenAI-format chat message."""
     role: str
-    content: str
+    content: Optional[str] = None
+    tool_calls: Optional[list[ToolCall]] = None
+    tool_call_id: Optional[str] = None
 
 
 class ChatCompletionRequest(BaseModel):
@@ -30,41 +48,52 @@ class ChatCompletionRequest(BaseModel):
     stream: bool = False
     temperature: float = 0.7
     max_tokens: Optional[int] = None
-    # VS Code Copilot sends these — parsed but NOT forwarded to RLM
-    tools: Optional[list] = None
+    tools: Optional[list[dict[str, Any]]] = None
     tool_choice: Optional[str] = None
 
 
-class ChatCompletionChoice(BaseModel):
-    index: int
-    message: ChatMessage
-    finish_reason: str
+# --- Direct API client (for tool-calling path) ---
+
+_api_client: Optional[openai.OpenAI] = None
 
 
-class ChatCompletionResponse(BaseModel):
-    id: str
-    object: str = "chat.completion"
-    created: int
-    model: str
-    choices: list[ChatCompletionChoice]
+def _get_api_client() -> openai.OpenAI:
+    """Get or create the direct OpenAI API client."""
+    global _api_client
+    if _api_client is None:
+        settings = get_settings()
+        if settings.active_provider == "mimo":
+            _api_client = openai.OpenAI(
+                api_key=settings.mimo_api_key,
+                base_url=settings.mimo_base_url,
+            )
+        else:
+            _api_client = openai.OpenAI(
+                api_key=settings.deepseek_api_key,
+                base_url=settings.deepseek_base_url,
+            )
+    return _api_client
 
 
+def _get_extra_body() -> dict:
+    """Get extra_body for DeepSeek API (disable thinking mode)."""
+    settings = get_settings()
+    if settings.active_provider == "deepseek":
+        return {"thinking": {"type": "disabled"}}
+    return {}
 
 
-def sanitize_messages(messages: list[ChatMessage]) -> list[ChatMessage]:
-    """Strip tool-role messages that RLM doesn't understand.
-
-    VS Code Copilot sends OpenAI-style tool definitions (tools: [...], tool_choice: "auto")
-    when toolCalling: true in chatLanguageModels.json. RLM doesn't support OpenAI function
-    calling — it uses REPL blocks instead. We parse these fields to avoid 422 errors, but
-    strip them before passing to RLM to prevent model confusion.
-    """
-    return [m for m in messages if m.role in ("system", "user", "assistant")]
+def _get_model_name() -> str:
+    """Get the model name for the active provider."""
+    settings = get_settings()
+    if settings.active_provider == "mimo":
+        return settings.mimo_model
+    return settings.deepseek_pro_model
 
 
 # --- FastAPI app ---
 
-app = FastAPI(title="RLM Dev Assistant", version="0.1.0")
+app = FastAPI(title="RLM Dev Assistant", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,15 +105,13 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Eagerly initialize RLM singleton on startup."""
+    """Log startup info."""
     settings = get_settings()
     logger.info(
         "RLM server starting: provider=%s, model=%s",
         settings.active_provider,
         settings.active_model_name,
     )
-    get_rlm()
-    logger.info("RLM singleton initialized")
 
 
 @app.get("/health")
@@ -117,81 +144,400 @@ async def list_models():
 async def chat_completions(request: ChatCompletionRequest):
     """OpenAI-compatible chat completions endpoint.
 
-    Extracts the last user message and sends it to RLM.
-    Supports both streaming (SSE) and non-streaming responses.
+    Two paths:
+    1. Tools present → direct API call → return tool_calls
+    2. No tools → RLM orchestrator → return text
     """
-    # Strip tool definitions from VS Code requests
-    if request.tools:
-        logger.info("Stripping %d tool definitions from VS Code request", len(request.tools))
-
-    # Sanitize messages — remove tool-role messages RLM doesn't understand
-    clean_messages = sanitize_messages(request.messages)
-
-    # Extract last user message
-    user_messages = [m for m in clean_messages if m.role == "user"]
-    if not user_messages:
-        return {"error": "No user message found"}
-
-    last_message = user_messages[-1].content
-    logger.info("Chat request: model=%s, stream=%s, message=%s...", request.model, request.stream, last_message[:100])
-
-    try:
-        response_text = chat(last_message)
-    except Exception as e:
-        logger.error("RLM chat failed: %s", str(e), exc_info=True)
-        return {"error": str(e)}
-
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     created = int(time.time())
+    model = request.model or _get_model_name()
+
+    has_tools = bool(request.tools)
+    has_tool_results = any(m.role == "tool" for m in request.messages)
+
+    if has_tools:
+        logger.info("Tool-calling path: %d tools, stream=%s", len(request.tools), request.stream)
+        return _handle_tool_calling(
+            completion_id, created, model, request
+        )
+    elif has_tool_results:
+        logger.info("Tool results path: stream=%s", request.stream)
+        return _handle_tool_results(
+            completion_id, created, model, request
+        )
+    else:
+        logger.info("Text path: stream=%s", request.stream)
+        return _handle_text_request(
+            completion_id, created, model, request
+        )
+
+
+def _handle_tool_calling(
+    completion_id: str,
+    created: int,
+    model: str,
+    request: ChatCompletionRequest,
+) -> dict:
+    """Handle requests with tools: direct API call to get tool_calls."""
+    client = _get_api_client()
+    messages = _messages_to_openai(request.messages)
 
     if request.stream:
-        # SSE streaming: send full response as one chunk, then [DONE]
-        def generate():
-            chunk = {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": request.model,
-                "choices": [{
-                    "index": 0,
-                    "delta": {"role": "assistant", "content": ""},
-                    "finish_reason": None,
-                }],
-            }
-            yield f"data: {json.dumps(chunk)}\n\n"
+        return _stream_tool_calls_response(
+            completion_id, created, model, client, messages, request
+        )
 
-            chunk["choices"][0]["delta"] = {"content": response_text}
-            yield f"data: {json.dumps(chunk)}\n\n"
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=request.tools,
+            tool_choice=request.tool_choice or "auto",
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            extra_body=_get_extra_body(),
+        )
 
-            chunk["choices"][0]["delta"] = {}
-            chunk["choices"][0]["finish_reason"] = "stop"
-            yield f"data: {json.dumps(chunk)}\n\n"
+        choice = response.choices[0]
+        message = choice.message
+
+        result_msg = {"role": "assistant"}
+        if message.content:
+            result_msg["content"] = message.content
+        if message.tool_calls:
+            result_msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in message.tool_calls
+            ]
+
+        finish_reason = choice.finish_reason or "stop"
+        if message.tool_calls:
+            finish_reason = "tool_calls"
+
+        logger.info(
+            "Tool-calling response: finish=%s, tool_calls=%s",
+            finish_reason,
+            [tc.function.name for tc in (message.tool_calls or [])],
+        )
+
+        return {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "message": result_msg,
+                "finish_reason": finish_reason,
+            }],
+        }
+
+    except Exception as e:
+        logger.error("Direct API call failed: %s", str(e), exc_info=True)
+        return {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": f"Error calling API: {str(e)}",
+                },
+                "finish_reason": "stop",
+            }],
+        }
+
+
+def _handle_tool_results(
+    completion_id: str,
+    created: int,
+    model: str,
+    request: ChatCompletionRequest,
+) -> dict:
+    """Handle tool results: forward conversation with results to direct API."""
+    client = _get_api_client()
+    messages = _messages_to_openai(request.messages)
+
+    if request.stream:
+        return _stream_tool_calls_response(
+            completion_id, created, model, client, messages, request
+        )
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=request.tools,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            extra_body=_get_extra_body(),
+        )
+
+        choice = response.choices[0]
+        message = choice.message
+
+        result_msg = {"role": "assistant"}
+        if message.content:
+            result_msg["content"] = message.content
+        if message.tool_calls:
+            result_msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in message.tool_calls
+            ]
+
+        finish_reason = choice.finish_reason or "stop"
+        if message.tool_calls:
+            finish_reason = "tool_calls"
+
+        logger.info("Tool results response: finish=%s", finish_reason)
+
+        return {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "message": result_msg,
+                "finish_reason": finish_reason,
+            }],
+        }
+
+    except Exception as e:
+        logger.error("Tool results API call failed: %s", str(e), exc_info=True)
+        return {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": f"Error processing tool results: {str(e)}",
+                },
+                "finish_reason": "stop",
+            }],
+        }
+
+
+def _stream_tool_calls_response(
+    completion_id: str,
+    created: int,
+    model: str,
+    client: openai.OpenAI,
+    messages: list[dict],
+    request: ChatCompletionRequest,
+) -> StreamingResponse:
+    """Stream tool-calling response as SSE — handles both tool_calls and text deltas."""
+    def generate():
+        try:
+            stream = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=request.tools,
+                tool_choice=request.tool_choice or "auto",
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                stream=True,
+                extra_body=_get_extra_body(),
+            )
+
+            sent_role = False
+            saw_tool_calls = False
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                choice = chunk.choices[0]
+                delta = choice.delta
+                finish = choice.finish_reason
+
+                # Send role delta first
+                if not sent_role:
+                    yield _sse_chunk(completion_id, created, model, {"role": "assistant"}, None)
+                    sent_role = True
+
+                # Content delta
+                if delta.content:
+                    yield _sse_chunk(completion_id, created, model, {"content": delta.content}, None)
+
+                # Tool calls delta
+                if delta.tool_calls:
+                    saw_tool_calls = True
+                    tc_deltas = []
+                    for tc in delta.tool_calls:
+                        tc_delta: dict[str, Any] = {"index": tc.index}
+                        if tc.id:
+                            tc_delta["id"] = tc.id
+                            tc_delta["type"] = "function"
+                        if tc.function:
+                            fn: dict[str, Any] = {}
+                            if tc.function.name:
+                                fn["name"] = tc.function.name
+                            if tc.function.arguments:
+                                fn["arguments"] = tc.function.arguments
+                            if fn:
+                                tc_delta["function"] = fn
+                        tc_deltas.append(tc_delta)
+                    yield _sse_chunk(completion_id, created, model, {"tool_calls": tc_deltas}, None)
+
+                # Finish — force "tool_calls" if we saw tool_calls
+                if finish:
+                    final_reason = "tool_calls" if saw_tool_calls else finish
+                    yield _sse_chunk(completion_id, created, model, {}, final_reason)
 
             yield "data: [DONE]\n\n"
 
-        return StreamingResponse(generate(), media_type="text/event-stream")
+        except Exception as e:
+            logger.error("Stream tool-calls failed: %s", str(e), exc_info=True)
+            yield _sse_chunk(completion_id, created, model, {"content": f"Error: {e}"}, "stop")
+            yield "data: [DONE]\n\n"
 
-    return ChatCompletionResponse(
-        id=completion_id,
-        created=created,
-        model=request.model,
-        choices=[
-            ChatCompletionChoice(
-                index=0,
-                message=ChatMessage(role="assistant", content=response_text),
-                finish_reason="stop",
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+def _sse_chunk(
+    completion_id: str,
+    created: int,
+    model: str,
+    delta: dict,
+    finish_reason: Optional[str],
+) -> str:
+    """Format a single SSE chunk."""
+    return f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': delta, 'finish_reason': finish_reason}]})}\n\n"
+
+
+def _handle_text_request(
+    completion_id: str,
+    created: int,
+    model: str,
+    request: ChatCompletionRequest,
+) -> dict:
+    """Handle text-only requests: direct API call."""
+    client = _get_api_client()
+    messages = _messages_to_openai(request.messages)
+
+    if request.stream:
+        return _stream_direct_response(
+            completion_id, created, model, client, messages, request
+        )
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            extra_body=_get_extra_body(),
+        )
+
+        content = response.choices[0].message.content or ""
+
+        return {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": "stop",
+            }],
+        }
+
+    except Exception as e:
+        logger.error("Text API call failed: %s", str(e), exc_info=True)
+        return {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": f"Error: {str(e)}",
+                },
+                "finish_reason": "stop",
+            }],
+        }
+
+
+def _messages_to_openai(messages: list[ChatMessage]) -> list[dict]:
+    """Convert ChatMessage list to OpenAI API format."""
+    result = []
+    for msg in messages:
+        entry = {"role": msg.role}
+
+        if msg.content is not None:
+            entry["content"] = msg.content
+
+        if msg.tool_calls:
+            entry["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": tc.function,
+                }
+                for tc in msg.tool_calls
+            ]
+
+        if msg.tool_call_id:
+            entry["tool_call_id"] = msg.tool_call_id
+
+        result.append(entry)
+
+    return result
+
+
+def _stream_direct_response(
+    completion_id: str,
+    created: int,
+    model: str,
+    client: openai.OpenAI,
+    messages: list[dict],
+    request: ChatCompletionRequest,
+) -> StreamingResponse:
+    """Stream direct API response as SSE (text-only path)."""
+    def generate():
+        try:
+            stream = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                stream=True,
+                extra_body=_get_extra_body(),
             )
-        ],
-    ).model_dump()
 
+            yield _sse_chunk(completion_id, created, model, {"role": "assistant"}, None)
 
-def main():
-    """CLI entrypoint for uvicorn."""
-    import uvicorn
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield _sse_chunk(completion_id, created, model, {"content": chunk.choices[0].delta.content}, None)
 
-    settings = get_settings()
-    uvicorn.run(app, host=settings.host, port=settings.port)
+            yield _sse_chunk(completion_id, created, model, {}, "stop")
+            yield "data: [DONE]\n\n"
 
+        except Exception as e:
+            logger.error("Stream text failed: %s", str(e), exc_info=True)
+            yield _sse_chunk(completion_id, created, model, {"content": f"Error: {e}"}, "stop")
+            yield "data: [DONE]\n\n"
 
-if __name__ == "__main__":
-    main()
+    return StreamingResponse(generate(), media_type="text/event-stream")
