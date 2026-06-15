@@ -1,4 +1,8 @@
-"""RLM client wrapper — initializes RLM with DeepSeek backend."""
+"""RLM client wrapper — initializes RLM with DeepSeek multi-model routing.
+
+Pro model handles root-level complex reasoning, Flash model handles sub-calls
+(llm_query, rlm_query at depth > 0) for cost optimization.
+"""
 
 import logging
 from typing import Optional
@@ -20,8 +24,9 @@ def create_rlm(settings: Optional[Settings] = None) -> RLM:
         settings = get_settings()
 
     logger.info(
-        "Creating RLM instance: model=%s, base_url=%s, persistent=%s",
-        settings.deepseek_model,
+        "Creating RLM instance: pro_model=%s, flash_model=%s, base_url=%s, persistent=%s",
+        settings.deepseek_pro_model,
+        settings.deepseek_flash_model,
         settings.deepseek_base_url,
         settings.rlm_persistent,
     )
@@ -29,6 +34,8 @@ def create_rlm(settings: Optional[Settings] = None) -> RLM:
     rlm = RLM(
         backend="openai",
         backend_kwargs=settings.rlm_backend_kwargs,
+        other_backends=["openai"],
+        other_backend_kwargs=settings.other_backend_kwargs,
         user_prologue=DEV_USER_PROLOGUE,
         verbose=settings.rlm_verbose,
         persistent=settings.rlm_persistent,

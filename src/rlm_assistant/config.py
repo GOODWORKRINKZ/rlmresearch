@@ -19,7 +19,8 @@ class Settings:
 
     deepseek_api_key: str = field(default_factory=lambda: os.getenv("DEEPSEEK_API_KEY", ""))
     deepseek_base_url: str = field(default_factory=lambda: os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
-    deepseek_model: str = field(default_factory=lambda: os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"))
+    deepseek_pro_model: str = field(default_factory=lambda: os.getenv("DEEPSEEK_PRO_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")))
+    deepseek_flash_model: str = field(default_factory=lambda: os.getenv("DEEPSEEK_FLASH_MODEL", "deepseek-v4-flash"))
     rlm_verbose: bool = field(default_factory=lambda: os.getenv("RLM_VERBOSE", "true").lower() == "true")
     rlm_persistent: bool = True
     rlm_compaction: bool = True
@@ -38,17 +39,27 @@ class Settings:
 
     @property
     def rlm_backend_kwargs(self) -> dict:
-        """Build backend_kwargs dict for RLM constructor."""
+        """Build backend_kwargs dict for RLM constructor (Pro model)."""
         return {
             "api_key": self.deepseek_api_key,
-            "model_name": self.deepseek_model,
+            "model_name": self.deepseek_pro_model,
             "base_url": self.deepseek_base_url,
         }
+
+    @property
+    def other_backend_kwargs(self) -> list[dict]:
+        """Build other_backend_kwargs for RLM sub-calls (Flash model)."""
+        return [{
+            "api_key": self.deepseek_api_key,
+            "model_name": self.deepseek_flash_model,
+            "base_url": self.deepseek_base_url,
+        }]
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return cached Settings instance."""
     settings = Settings()
-    logger.info("Settings loaded: model=%s, base_url=%s", settings.deepseek_model, settings.deepseek_base_url)
+    logger.info("Settings loaded: pro_model=%s, flash_model=%s, base_url=%s",
+                settings.deepseek_pro_model, settings.deepseek_flash_model, settings.deepseek_base_url)
     return settings
