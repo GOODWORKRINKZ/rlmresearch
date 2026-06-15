@@ -38,12 +38,13 @@ from rlm_assistant.tools import (
     map_rlm_tool_call_to_vscode,
 )
 
-# Configure logging to show our app logs alongside uvicorn
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
+# Configure logging — only set format if no handlers exist (avoid conflict with uvicorn)
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
 logger = logging.getLogger("rlm.server")
 logger.setLevel(logging.INFO)
 
@@ -195,7 +196,7 @@ async def chat_completions(request: ChatCompletionRequest):
         len(request.messages), msg_roles,
     )
 
-    if has_tool_results:
+    if has_tool_results and USE_RLM:
         logger.info("RLM tool results path: stream=%s", request.stream)
         return await _handle_tool_results_via_rlm(
             completion_id, created, model, request
@@ -212,7 +213,10 @@ async def chat_completions(request: ChatCompletionRequest):
         )
     else:
         # Direct API fallback (USE_RLM=false)
-        if has_tools:
+        if has_tool_results:
+            logger.info("Direct tool results path")
+            return _handle_tool_results_direct(completion_id, created, model, request)
+        elif has_tools:
             logger.info("Direct tool-calling path: %d tools", len(request.tools))
             return _handle_tool_calling_direct(completion_id, created, model, request)
         else:
