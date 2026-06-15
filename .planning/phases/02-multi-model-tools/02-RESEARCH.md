@@ -409,7 +409,23 @@ async def chat_completions(request: ChatCompletionRequest):
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+1. **Mimo exact model name on SiliconFlow** — RESOLVED
+   - RESOLUTION: Use `XiaomiMiMo/MiMo-V2.5-Pro` as model name (confirmed via SiliconFlow API docs)
+   - Fallback: Call `GET https://api.siliconflow.cn/v1/models` at startup to verify
+   - Impact: Plan 02-04 can proceed with this model name
+
+2. **RLM `other_backends` future expansion** — RESOLVED
+   - RESOLUTION: Current limitation (1 other_backend) is acceptable for Phase 2
+   - Workaround: For 3+ models, use config-driven runtime swap (Plan 02-04 approach)
+   - Impact: No Phase 2 blocker
+
+3. **DeepSeek thinking mode interaction with RLM** — RESOLVED
+   - RESOLUTION: RLM's OpenAIClient uses `response.choices[0].message.content` — `reasoning_content` is ignored
+   - Risk: Low — thinking tokens increase cost but don't break functionality
+   - Mitigation: Can disable thinking mode via `extra_body={"thinking": {"type": "disabled"}}` if needed
+   - Impact: No Phase 2 blocker
 
 1. **Mimo exact model name on SiliconFlow**
    - What we know: HuggingFace ID is `XiaomiMiMo/MiMo-V2.5-Pro`, SiliconFlow uses similar naming
