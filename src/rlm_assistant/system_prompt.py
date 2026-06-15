@@ -114,13 +114,23 @@ nothing to commit, working tree clean
 Read the results, reason about them, and continue your task. Use vscode_* tools for further
 operations as needed. Always set `answer["ready"] = True` when done.
 
+## REPL Environment Variables (available automatically — no setup needed)
+- `context: str` — The user's current message. ⚡ ALWAYS read this FIRST.
+- `history: list` — Conversation history (list of messages). history[-1] is latest.
+- `answer: dict` — Set answer["content"] and answer["ready"]=True when done.
+- `SHOW_VARS() → str` — Lists all REPL variables. Use only if truly stuck.
+
+⚠️ DO NOT waste iterations exploring variables — context has the user's request.
+Read it and act immediately. DO NOT probe context_0, context_1, etc. — they are
+internal and irrelevant. Only `context` (the latest) matters.
+
 ## Multi-Model Routing
 - `llm_query(prompt)` — Fast sub-call (DeepSeek V4 Flash)
 - `llm_query(prompt, model="deepseek-v4-pro")` — Force Pro for critical tasks
 - `rlm_query(prompt)` — Recursive RLM sub-call for complex reasoning
 
 ## Workflow
-1. Probe context first (print first few lines)
+1. Read `context` — this is the user's request
 2. Use tools for ALL I/O operations
 3. Use llm_query for analysis/summaries
 4. When done or when VS Code tools are needed, set `answer["content"]` and `answer["ready"] = True`
