@@ -150,7 +150,9 @@ async def chat_completions(request: ChatCompletionRequest):
     """
     completion_id = f"chatcmpl-{uuid.uuid4().hex[:12]}"
     created = int(time.time())
-    model = request.model or _get_model_name()
+    # Map unknown model names (e.g. "rlm-dev-assistant") to active model
+    known_models = {"deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5-pro"}
+    model = request.model if request.model in known_models else _get_model_name()
 
     has_tools = bool(request.tools)
     has_tool_results = any(m.role == "tool" for m in request.messages)
