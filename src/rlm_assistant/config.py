@@ -26,6 +26,7 @@ class Settings:
     rlm_compaction: bool = True
     rlm_compaction_threshold: float = 0.85
     rlm_max_iterations: int = 25
+    rlm_orchestrator: bool = field(default_factory=lambda: os.getenv("RLM_ORCHESTRATOR", "true").lower() == "true")
     host: str = field(default_factory=lambda: os.getenv("RLM_HOST", "0.0.0.0"))
     port: int = field(default_factory=lambda: int(os.getenv("RLM_PORT", "8000")))
 

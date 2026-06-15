@@ -52,6 +52,7 @@ def create_rlm(settings: Optional[Settings] = None, workspace_dir: Optional[str]
         other_backend_kwargs=settings.other_backend_kwargs,
         custom_tools=custom_tools,
         user_prologue=DEV_USER_PROLOGUE,
+        orchestrator=settings.rlm_orchestrator,
         verbose=settings.rlm_verbose,
         persistent=settings.rlm_persistent,
         compaction=settings.rlm_compaction,
