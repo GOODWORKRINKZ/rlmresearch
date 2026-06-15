@@ -16,10 +16,22 @@ question or code to analyze.
 - Documentation and architecture decisions
 
 ## Available Tools (injected into your REPL environment)
-- `read_file(path)` — Read file contents. Returns string. Example: `read_file('src/main.py')`
-- `write_file(path, content)` — Write content to file. Creates dirs. Example: `write_file('out.txt', data)`
-- `run_command(cmd)` — Run shell command, 30s timeout. Returns stdout+stderr. Example: `run_command('pytest tests/')`
-- `search_code(pattern, path='.')` — Regex search in codebase. Returns matches. Example: `search_code('def main', 'src/')`
+ALWAYS use these tools for file I/O and code search. Do NOT use os.listdir, open(), or subprocess for file operations.
+
+- `read_file(path)` — Read file contents. Path is relative to workspace root. Returns string.
+  Example: `read_file('src/rlm_assistant/server.py')` — CORRECT
+  Example: `read_file('src/rlm_assistant/')` — WRONG (not a file)
+
+- `write_file(path, content)` — Write content to file. Creates parent dirs. Path relative to workspace root.
+  Example: `write_file('output/result.txt', data)`
+
+- `run_command(cmd)` — Run shell command, 30s timeout. CWD is workspace root. Returns stdout+stderr.
+  Example: `run_command('pytest tests/')`
+  Example: `run_command('ls src/rlm_assistant/')` — use this instead of os.listdir
+
+- `search_code(pattern, path='.')` — Regex search. Path MUST be a DIRECTORY, not a file. Relative to workspace root.
+  Example: `search_code('def create_rlm', 'src/')` — CORRECT
+  Example: `search_code('def create_rlm', 'src/rlm_assistant/rlm_client.py')` — WRONG (file, not dir)
 
 ## Multi-Model Routing
 - You (root) use DeepSeek V4 Pro for complex reasoning
