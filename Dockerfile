@@ -10,14 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy dependency files first for better caching
 COPY pyproject.toml .
+COPY src/ src/
 
 # Install dependencies
-RUN pip install --no-cache-dir -e .
-
-# Copy the entire project
-COPY . .
-
-# Install the package in editable mode
 RUN pip install --no-cache-dir -e .
 
 # Set environment variables

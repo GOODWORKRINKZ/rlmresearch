@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.planning/
+.copilot/
+.vscode/
+workspace/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
