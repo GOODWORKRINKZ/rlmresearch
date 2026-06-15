@@ -106,10 +106,11 @@ def create_rlm(settings: Optional[Settings] = None, workspace_dir: Optional[str]
     _custom_tools = custom_tools
 
     logger.info(
-        "Creating RLM instance: provider=%s, model=%s, base_url=%s, workspace=%s, persistent=%s, remote=%s",
-        settings.active_provider,
+        "Creating RLM instance: root=%s/%s, sub=%s/%s, workspace=%s, persistent=%s, remote=%s",
+        settings.root_provider,
         settings.active_model_name,
-        settings.deepseek_base_url,
+        settings.sub_provider,
+        settings.sub_model_name,
         workspace_dir,
         settings.rlm_persistent,
         rlm_remote,

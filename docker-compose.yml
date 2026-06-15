@@ -12,7 +12,11 @@ services:
       - RLM_REMOTE=true
       - RLM_WORKSPACE=/workspace
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - MIMO_API_KEY=${MIMO_API_KEY}
+      - MIMO_MODEL=${MIMO_MODEL:-mimo-v2.5-pro}
       - ACTIVE_PROVIDER=deepseek
+      - ROOT_PROVIDER=${ROOT_PROVIDER:-mimo}
+      - SUB_PROVIDER=${SUB_PROVIDER:-deepseek}
     volumes:
       - ./workspace:/workspace
     restart: unless-stopped

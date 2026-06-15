@@ -32,6 +32,8 @@ class Settings:
     mimo_base_url: str = field(default_factory=lambda: os.getenv("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1"))
     mimo_model: str = field(default_factory=lambda: os.getenv("MIMO_MODEL", "XiaomiMiMo/MiMo-V2.5-Pro"))
     active_provider: str = field(default_factory=lambda: os.getenv("ACTIVE_PROVIDER", "deepseek"))
+    root_provider: str = field(default_factory=lambda: os.getenv("ROOT_PROVIDER", ""))
+    sub_provider: str = field(default_factory=lambda: os.getenv("SUB_PROVIDER", ""))
     host: str = field(default_factory=lambda: os.getenv("RLM_HOST", "0.0.0.0"))
     port: int = field(default_factory=lambda: int(os.getenv("RLM_PORT", "8000")))
 
@@ -51,6 +53,18 @@ class Settings:
                 "MIMO_API_KEY is not set but ACTIVE_PROVIDER is 'mimo'. "
                 "Set it in your environment or .env file."
             )
+        # ROOT_PROVIDER/SUB_PROVIDER override ACTIVE_PROVIDER for mixed routing
+        # If not set, fall back to ACTIVE_PROVIDER for both
+        if not self.root_provider:
+            self.root_provider = self.active_provider
+        if not self.sub_provider:
+            self.sub_provider = self.active_provider
+        # Validate root_provider and sub_provider
+        for prov, name in [(self.root_provider, "ROOT_PROVIDER"), (self.sub_provider, "SUB_PROVIDER")]:
+            if prov not in ("deepseek", "mimo"):
+                raise ValueError(f"{name} must be 'deepseek' or 'mimo', got '{prov}'")
+            if prov == "mimo" and not self.mimo_api_key:
+                raise ValueError(f"{name} is 'mimo' but MIMO_API_KEY is not set")
 
     @property
     def rlm_backend_kwargs(self) -> dict:
@@ -72,8 +86,8 @@ class Settings:
 
     @property
     def active_backend_kwargs(self) -> dict:
-        """Build backend_kwargs for the active provider's primary model."""
-        if self.active_provider == "mimo":
+        """Build backend_kwargs for the root (primary) model."""
+        if self.root_provider == "mimo":
             return {
                 "api_key": self.mimo_api_key,
                 "model_name": self.mimo_model,
@@ -83,8 +97,8 @@ class Settings:
 
     @property
     def active_other_backend_kwargs(self) -> list[dict]:
-        """Build other_backend_kwargs for the active provider's sub-call model."""
-        if self.active_provider == "mimo":
+        """Build other_backend_kwargs for sub-call model."""
+        if self.sub_provider == "mimo":
             return [{
                 "api_key": self.mimo_api_key,
                 "model_name": self.mimo_model,
@@ -94,10 +108,17 @@ class Settings:
 
     @property
     def active_model_name(self) -> str:
-        """Return the active provider's primary model name."""
-        if self.active_provider == "mimo":
+        """Return the root provider's primary model name."""
+        if self.root_provider == "mimo":
             return self.mimo_model
         return self.deepseek_pro_model
+
+    @property
+    def sub_model_name(self) -> str:
+        """Return the sub provider's model name."""
+        if self.sub_provider == "mimo":
+            return self.mimo_model
+        return self.deepseek_flash_model
 
 
 @lru_cache(maxsize=1)

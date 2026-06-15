@@ -137,9 +137,11 @@ async def startup_event():
     """Log startup info."""
     settings = get_settings()
     logger.info(
-        "RLM server starting: provider=%s, model=%s",
-        settings.active_provider,
+        "RLM server starting: root=%s/%s, sub=%s/%s",
+        settings.root_provider,
         settings.active_model_name,
+        settings.sub_provider,
+        settings.sub_model_name,
     )
 
 
@@ -149,8 +151,10 @@ async def health():
     settings = get_settings()
     return {
         "status": "ok",
-        "provider": settings.active_provider,
-        "model": settings.active_model_name,
+        "root_provider": settings.root_provider,
+        "root_model": settings.active_model_name,
+        "sub_provider": settings.sub_provider,
+        "sub_model": settings.sub_model_name,
     }
 
 
