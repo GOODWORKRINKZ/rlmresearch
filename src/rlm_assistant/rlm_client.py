@@ -12,7 +12,7 @@ from typing import Optional
 from rlm import RLM
 
 from rlm_assistant.config import get_settings, Settings
-from rlm_assistant.system_prompt import DEV_USER_PROLOGUE
+from rlm_assistant.system_prompt import build_dev_prologue
 from rlm_assistant.tools import build_custom_tools
 
 logger = logging.getLogger(__name__)
@@ -35,17 +35,22 @@ def create_rlm(settings: Optional[Settings] = None, workspace_dir: Optional[str]
     if workspace_dir is None:
         workspace_dir = os.getenv("RLM_WORKSPACE", os.getcwd())
 
+    # RLM_REMOTE=true → RLM has no filesystem access, must use vscode_* tools only
+    rlm_remote = os.getenv("RLM_REMOTE", "false").lower() == "true"
+    include_local_tools = not rlm_remote
+
     global _custom_tools
-    custom_tools = build_custom_tools(workspace_dir)
+    custom_tools = build_custom_tools(workspace_dir, include_local_tools=include_local_tools)
     _custom_tools = custom_tools
 
     logger.info(
-        "Creating RLM instance: provider=%s, model=%s, base_url=%s, workspace=%s, persistent=%s",
+        "Creating RLM instance: provider=%s, model=%s, base_url=%s, workspace=%s, persistent=%s, remote=%s",
         settings.active_provider,
         settings.active_model_name,
         settings.deepseek_base_url,
         workspace_dir,
         settings.rlm_persistent,
+        rlm_remote,
     )
 
     rlm = RLM(
@@ -54,7 +59,7 @@ def create_rlm(settings: Optional[Settings] = None, workspace_dir: Optional[str]
         other_backends=["openai"],
         other_backend_kwargs=settings.active_other_backend_kwargs,
         custom_tools=custom_tools,
-        user_prologue=DEV_USER_PROLOGUE,
+        user_prologue=build_dev_prologue(include_local_tools=include_local_tools),
         orchestrator=settings.rlm_orchestrator,
         verbose=settings.rlm_verbose,
         persistent=settings.rlm_persistent,

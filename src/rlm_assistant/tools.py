@@ -239,8 +239,13 @@ def build_custom_tools(workspace_dir: str, include_local_tools: bool = True) -> 
             "tool": _vscode_search,
             "description": "Search workspace via VS Code search. Usage: vscode_search('functionName', 'src/')",
         },
-        # Tracker accessors (for server)
+    })
+
+    # Tracker accessors (for server)
+    result.update({
         "_get_vscode_tool_calls": {"tool": get_vscode_tool_calls, "description": "Internal: get pending VS Code tool calls"},
         "_get_vscode_id_map": {"tool": get_vscode_id_map, "description": "Internal: get tool_call_id to {name,args} mapping"},
         "_clear_vscode_tool_calls": {"tool": clear_vscode_tool_calls, "description": "Internal: clear pending tool calls and id map"},
-    }
+    })
+
+    return result

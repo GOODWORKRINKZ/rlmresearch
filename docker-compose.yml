@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  rlm-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rlm-research-server
+    ports:
+      - "8000:8000"
+    environment:
+      - RLM_REMOTE=true
+      - RLM_WORKSPACE=/workspace
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - ACTIVE_PROVIDER=deepseek
+    volumes:
+      - ./workspace:/workspace
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

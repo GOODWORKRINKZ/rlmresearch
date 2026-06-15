@@ -6,7 +6,22 @@ context variable, llm_query, rlm_query, etc.). Instead we use user_prologue,
 which is injected AFTER the default system prompt.
 """
 
-DEV_USER_PROLOGUE = """You are a software development assistant with access to tools for file operations,
+
+def build_dev_prologue(include_local_tools: bool = True) -> str:
+    """Build the user prologue string based on whether local tools are available.
+
+    Args:
+        include_local_tools: If True, include local tool instructions.
+                           If False, RLM must use vscode_* tools for everything.
+    """
+    if include_local_tools:
+        return _LOCAL_TOOLS_PROLOGUE + _COMMON_PROLOGUE
+    else:
+        return _REMOTE_TOOLS_PROLOGUE + _COMMON_PROLOGUE
+
+
+# ---------- Prologue for when local tools ARE available (default) ----------
+_LOCAL_TOOLS_PROLOGUE = """You are a software development assistant with access to tools for file operations,
 code search, and command execution. These tools are FUNCTIONS available in your REPL.
 
 ## ⚠️ CRITICAL: ALWAYS USE TOOLS — NEVER write raw Python for I/O
@@ -41,7 +56,26 @@ write_file('output/report.txt', 'Analysis complete')
 - `run_command(cmd: str) -> str` — Run shell command (30s timeout). CWD = workspace root.
 - `search_code(pattern: str, path: str = '.') -> str` — Regex search. Path must be a DIRECTORY.
 
-## VS Code Tools (DEFERRED — sent to VS Code for execution)
+"""
+
+# ---------- Prologue for when running remotely (NO local tools) ----------
+_REMOTE_TOOLS_PROLOGUE = """You are a software development assistant running in REMOTE mode.
+You have NO access to the local filesystem. All file and system operations MUST go through VS Code tools.
+
+## ⚠️ CRITICAL: You have NO local tools — use ONLY vscode_* tools
+
+You CANNOT:
+- Read files directly with Python `open()` or `read_file()` — use `vscode_read_file()`
+- Run commands with `os.system()` or `run_command()` — use `vscode_run_terminal()`
+- Search files with `os.walk()` or `search_code()` — use `vscode_search()`
+- Write files with `open('w')` or `write_file()` — use `vscode_edit_file()`
+
+All vscode_* tools are DEFERRED — they record your request and VS Code executes them.
+
+"""
+
+# ---------- Common prologue (VS Code tools + workflow) ----------
+_COMMON_PROLOGUE = """## VS Code Tools (DEFERRED — sent to VS Code for execution)
 
 ⚠️ These tools are DEFERRED: they record your request and return a placeholder like
 `[TOOL_REQUESTED: ...]`. The actual execution happens in VS Code AFTER you finish this turn.
@@ -77,16 +111,8 @@ Result of vscode_run_terminal({"command": "git status"}):
 On branch main
 nothing to commit, working tree clean
 ```
-Read the results, reason about them, and continue your task. Use local tools for further
-investigation, or request more VS Code tools if needed.
-
-## When to use Local vs VS Code tools
-- **Local tools** — reading/writing files, running commands, searching code on the SERVER
-- **VS Code tools** — operations that need VS Code context: git, builds, deploys, or when
-  you need VS Code to handle the execution (e.g., terminal commands with special env)
-
-Prefer local tools for quick file operations. Use VS Code tools when you specifically need
-VS Code's execution environment.
+Read the results, reason about them, and continue your task. Use vscode_* tools for further
+operations as needed. Always set `answer["ready"] = True` when done.
 
 ## Multi-Model Routing
 - `llm_query(prompt)` — Fast sub-call (DeepSeek V4 Flash)
@@ -99,3 +125,7 @@ VS Code's execution environment.
 3. Use llm_query for analysis/summaries
 4. When done or when VS Code tools are needed, set `answer["content"]` and `answer["ready"] = True`
 """
+
+
+# Default prologue (backward compatible — includes local tools)
+DEV_USER_PROLOGUE = build_dev_prologue(include_local_tools=True)
