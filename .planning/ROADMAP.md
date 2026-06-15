@@ -29,7 +29,7 @@ Plans:
 - [x] 02-01-PLAN.md — Model routing: Pro for root, Flash for sub-calls (wave 1)
 - [x] 02-02-PLAN.md — Custom tools: read_file, write_file, run_command, search_code (wave 1)
 - [x] 02-03-PLAN.md — System prompt + VS Code tool calling fix (wave 2)
-- [ ] 02-04-PLAN.md — Mimo integration with config-driven switching (wave 3)
+- [x] 02-04-PLAN.md — Mimo integration with config-driven switching (wave 3)
 
 ### Verification
 - RLM автоматически выбирает модель по сложности задачи
