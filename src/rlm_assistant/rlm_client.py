@@ -7,15 +7,65 @@ Pro model handles root-level complex reasoning, Flash model handles sub-calls
 
 import logging
 import os
+import sys
 from typing import Optional
 
 from rlm import RLM
 
+logger = logging.getLogger(__name__)
+
+
+def _patch_add_context():
+    """Monkey-patch LocalREPL to always point 'context' to the latest request.
+
+    Bug in RLM: With persistent=True, add_context() creates context_0, context_1, etc.
+    but _restore_scaffold() ALWAYS resets `context = context_0` after every execute_code().
+    So the model always sees the FIRST request's data, not the latest.
+
+    Fix: Patch both add_context (to track the latest index) and _restore_scaffold
+    (to restore context to the latest, not context_0).
+    """
+    from rlm.environments.local_repl import LocalREPL
+
+    # -- Patch 1: add_context — track the latest context index --
+    _original_add_context = LocalREPL.add_context
+
+    def _fixed_add_context(self, context_payload, context_index=None):
+        result = _original_add_context(self, context_payload, context_index)
+        # Remember which context index is the latest for this REPL instance
+        self._latest_context_index = result
+        # Also update locals directly so it's correct before next execute_code
+        var_name = f"context_{result}"
+        if var_name in self.locals:
+            self.locals["context"] = self.locals[var_name]
+        return result
+
+    LocalREPL.add_context = _fixed_add_context
+
+    # -- Patch 2: _restore_scaffold — restore context to latest, not context_0 --
+    _original_restore_scaffold = LocalREPL._restore_scaffold
+
+    def _fixed_restore_scaffold(self) -> None:
+        _original_restore_scaffold(self)
+        # After original scaffold restores context=context_0, override to latest
+        latest = getattr(self, '_latest_context_index', 0)
+        var_name = f"context_{latest}"
+        if latest > 0 and var_name in self.locals:
+            self.locals["context"] = self.locals[var_name]
+
+    LocalREPL._restore_scaffold = _fixed_restore_scaffold
+
+    sys.stderr.write("[rlm_client] Patched LocalREPL: context always points to latest request\n")
+    sys.stderr.flush()
+    logger.info("Patched LocalREPL: context always points to latest request")
+
+
+# Apply patch at import time
+_patch_add_context()
+
 from rlm_assistant.config import get_settings, Settings
 from rlm_assistant.system_prompt import build_dev_prologue
 from rlm_assistant.tools import build_custom_tools
-
-logger = logging.getLogger(__name__)
 
 # Module-level singleton
 _rlm_instance: Optional[RLM] = None
