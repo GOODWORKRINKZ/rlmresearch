@@ -23,10 +23,13 @@ Plans:
 **Goal**: DeepSeek Pro для root, Flash для sub-calls, dev tools в REPL
 
 ### Plans
-1. **[P2.1] Model routing** — Pro для сложных задач, Flash для sub-calls
-2. **[P2.2] Custom tools** — файловые операции, запуск команд, анализ кода
-3. **[P2.3] System prompt tuning** — оркестратор для multi-model delegation
-4. **[P2.4] Mimo integration** — альтернативный backend
+**4 plans in 3 waves**
+
+Plans:
+- [ ] 02-01-PLAN.md — Model routing: Pro for root, Flash for sub-calls (wave 1)
+- [ ] 02-02-PLAN.md — Custom tools: read_file, write_file, run_command, search_code (wave 1)
+- [ ] 02-03-PLAN.md — System prompt + VS Code tool calling fix (wave 2)
+- [ ] 02-04-PLAN.md — Mimo integration with config-driven switching (wave 3)
 
 ### Verification
 - RLM автоматически выбирает модель по сложности задачи
