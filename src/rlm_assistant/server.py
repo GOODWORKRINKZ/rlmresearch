@@ -79,9 +79,9 @@ async def startup_event():
     """Eagerly initialize RLM singleton on startup."""
     settings = get_settings()
     logger.info(
-        "RLM server starting: pro_model=%s, flash_model=%s",
-        settings.deepseek_pro_model,
-        settings.deepseek_flash_model,
+        "RLM server starting: provider=%s, model=%s",
+        settings.active_provider,
+        settings.active_model_name,
     )
     get_rlm()
     logger.info("RLM singleton initialized")
@@ -93,9 +93,8 @@ async def health():
     settings = get_settings()
     return {
         "status": "ok",
-        "backend": "deepseek",
-        "pro_model": settings.deepseek_pro_model,
-        "flash_model": settings.deepseek_flash_model,
+        "provider": settings.active_provider,
+        "model": settings.active_model_name,
     }
 
 

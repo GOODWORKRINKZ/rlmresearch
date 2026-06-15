@@ -37,9 +37,9 @@ def create_rlm(settings: Optional[Settings] = None, workspace_dir: Optional[str]
     custom_tools = build_custom_tools(workspace_dir)
 
     logger.info(
-        "Creating RLM instance: pro_model=%s, flash_model=%s, base_url=%s, workspace=%s, persistent=%s",
-        settings.deepseek_pro_model,
-        settings.deepseek_flash_model,
+        "Creating RLM instance: provider=%s, model=%s, base_url=%s, workspace=%s, persistent=%s",
+        settings.active_provider,
+        settings.active_model_name,
         settings.deepseek_base_url,
         workspace_dir,
         settings.rlm_persistent,
@@ -47,9 +47,9 @@ def create_rlm(settings: Optional[Settings] = None, workspace_dir: Optional[str]
 
     rlm = RLM(
         backend="openai",
-        backend_kwargs=settings.rlm_backend_kwargs,
+        backend_kwargs=settings.active_backend_kwargs,
         other_backends=["openai"],
-        other_backend_kwargs=settings.other_backend_kwargs,
+        other_backend_kwargs=settings.active_other_backend_kwargs,
         custom_tools=custom_tools,
         user_prologue=DEV_USER_PROLOGUE,
         orchestrator=settings.rlm_orchestrator,
