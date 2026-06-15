@@ -136,12 +136,14 @@ app.add_middleware(
 async def startup_event():
     """Log startup info."""
     settings = get_settings()
+    consultant = settings.mimo_model if settings.mimo_api_key else "none"
     logger.info(
-        "RLM server starting: root=%s/%s, sub=%s/%s",
+        "RLM server starting: root=%s/%s, sub=%s/%s, consultant=%s (custom tool)",
         settings.root_provider,
         settings.active_model_name,
         settings.sub_provider,
         settings.sub_model_name,
+        consultant,
     )
 
 
@@ -149,12 +151,14 @@ async def startup_event():
 async def health():
     """Health check endpoint."""
     settings = get_settings()
+    consultant = settings.mimo_model if settings.mimo_api_key else None
     return {
         "status": "ok",
         "root_provider": settings.root_provider,
         "root_model": settings.active_model_name,
         "sub_provider": settings.sub_provider,
         "sub_model": settings.sub_model_name,
+        "consultant_model": consultant,
     }
 
 

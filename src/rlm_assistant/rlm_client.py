@@ -32,24 +32,21 @@ def _patch_add_context():
 
     def _fixed_add_context(self, context_payload, context_index=None):
         result = _original_add_context(self, context_payload, context_index)
-        # Remember which context index is the latest for this REPL instance
-        self._latest_context_index = result
-        # Also update locals directly so it's correct before next execute_code
         var_name = f"context_{result}"
         if var_name in self.locals:
             self.locals["context"] = self.locals[var_name]
-        # Clean up old versioned context/history vars to prevent pollution.
-        # With persistent=True, old contexts (context_0, context_1, ...) and
-        # histories (history_0, history_1, ...) accumulate forever. The model
-        # sees them and gets confused by stale data from previous requests.
-        to_delete = []
-        for key in list(self.locals.keys()):
-            if key == var_name or key == "context":
-                continue
-            if (key.startswith("context_") or key.startswith("history_")) and key[-1].isdigit():
-                to_delete.append(key)
-        for key in to_delete:
-            del self.locals[key]
+        # Make ALL context_N aliases point to the latest content
+        latest_content = self.locals.get("context")
+        if latest_content is not None:
+            for key in list(self.locals.keys()):
+                if key.startswith("context_") and key[-1].isdigit() and key != var_name:
+                    self.locals[key] = latest_content
+        # Also make history_N aliases point to latest history
+        latest_history = self.locals.get("history")
+        if latest_history is not None:
+            for key in list(self.locals.keys()):
+                if key.startswith("history_") and key[-1].isdigit():
+                    self.locals[key] = latest_history
         return result
 
     LocalREPL.add_context = _fixed_add_context
@@ -59,11 +56,28 @@ def _patch_add_context():
 
     def _fixed_restore_scaffold(self) -> None:
         _original_restore_scaffold(self)
-        # After original scaffold restores context=context_0, override to latest
-        latest = getattr(self, '_latest_context_index', 0)
-        var_name = f"context_{latest}"
-        if latest > 0 and var_name in self.locals:
-            self.locals["context"] = self.locals[var_name]
+        # After original scaffold restores context=context_0, override to latest.
+        # Find the highest context_N index — that's always the most recent.
+        max_idx = -1
+        for key in self.locals:
+            if key.startswith("context_") and key[-1].isdigit():
+                try:
+                    idx = int(key.split("_", 1)[1])
+                    if idx > max_idx:
+                        max_idx = idx
+                except ValueError:
+                    pass
+        if max_idx >= 0:
+            var_name = f"context_{max_idx}"
+            if var_name in self.locals:
+                self.locals["context"] = self.locals[var_name]
+        # Also make all context_N aliases point to latest content
+        # (scaffold may have recreated them from history)
+        latest_content = self.locals.get("context")
+        if latest_content is not None:
+            for key in list(self.locals.keys()):
+                if key.startswith("context_") and key[-1].isdigit():
+                    self.locals[key] = latest_content
 
     LocalREPL._restore_scaffold = _fixed_restore_scaffold
 

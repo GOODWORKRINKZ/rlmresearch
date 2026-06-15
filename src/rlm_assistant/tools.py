@@ -248,4 +248,39 @@ def build_custom_tools(workspace_dir: str, include_local_tools: bool = True) -> 
         "_clear_vscode_tool_calls": {"tool": clear_vscode_tool_calls, "description": "Internal: clear pending tool calls and id map"},
     })
 
+    # Mimo consultant tool (direct API call, not through RLM backends)
+    mimo_api_key = os.getenv("MIMO_API_KEY", "")
+    mimo_base_url = os.getenv("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1")
+    mimo_model = os.getenv("MIMO_MODEL", "mimo-v2.5-pro")
+
+    if mimo_api_key:
+        import httpx
+
+        def _consult_mimo(query: str) -> str:
+            """Consult Mimo (Xiaomi) for a second opinion or alternative approach."""
+            try:
+                with httpx.Client(timeout=60.0) as client:
+                    resp = client.post(
+                        f"{mimo_base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {mimo_api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": mimo_model,
+                            "messages": [{"role": "user", "content": query}],
+                            "max_tokens": 2048,
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"]
+            except Exception as e:
+                return f"ERROR consulting Mimo: {e}"
+
+        result["consult_mimo"] = {
+            "tool": _consult_mimo,
+            "description": "Consult Mimo (Xiaomi) for a second opinion, alternative approach, or cross-check. Usage: consult_mimo('What do you think about this architecture?')",
+        }
+
     return result

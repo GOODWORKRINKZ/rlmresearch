@@ -15,7 +15,7 @@ services:
       - MIMO_API_KEY=${MIMO_API_KEY}
       - MIMO_MODEL=${MIMO_MODEL:-mimo-v2.5-pro}
       - ACTIVE_PROVIDER=deepseek
-      - ROOT_PROVIDER=${ROOT_PROVIDER:-mimo}
+      - ROOT_PROVIDER=${ROOT_PROVIDER:-deepseek}
       - SUB_PROVIDER=${SUB_PROVIDER:-deepseek}
     volumes:
       - ./workspace:/workspace

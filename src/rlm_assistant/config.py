@@ -97,14 +97,16 @@ class Settings:
 
     @property
     def active_other_backend_kwargs(self) -> list[dict]:
-        """Build other_backend_kwargs for sub-call model."""
-        if self.sub_provider == "mimo":
-            return [{
-                "api_key": self.mimo_api_key,
-                "model_name": self.mimo_model,
-                "base_url": self.mimo_base_url,
-            }]
-        return self.other_backend_kwargs
+        """Build other_backend_kwargs for sub-call models.
+
+        RLM only supports ONE additional backend for recursive sub-calls.
+        Mimo is available as a custom tool (consult_mimo) instead.
+        """
+        return [{
+            "api_key": self.deepseek_api_key,
+            "model_name": self.deepseek_flash_model,
+            "base_url": self.deepseek_base_url,
+        }]
 
     @property
     def active_model_name(self) -> str:
