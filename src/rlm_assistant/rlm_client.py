@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Module-level singleton
 _rlm_instance: Optional[RLM] = None
+_custom_tools: Optional[dict] = None
 
 
 def create_rlm(settings: Optional[Settings] = None, workspace_dir: Optional[str] = None) -> RLM:
@@ -34,7 +35,9 @@ def create_rlm(settings: Optional[Settings] = None, workspace_dir: Optional[str]
     if workspace_dir is None:
         workspace_dir = os.getenv("RLM_WORKSPACE", os.getcwd())
 
+    global _custom_tools
     custom_tools = build_custom_tools(workspace_dir)
+    _custom_tools = custom_tools
 
     logger.info(
         "Creating RLM instance: provider=%s, model=%s, base_url=%s, workspace=%s, persistent=%s",
@@ -73,6 +76,26 @@ def get_rlm() -> RLM:
     return _rlm_instance
 
 
+def get_vscode_tool_calls() -> list[dict]:
+    """Return pending VS Code tool calls from last RLM execution."""
+    if _custom_tools and "_get_vscode_tool_calls" in _custom_tools:
+        return _custom_tools["_get_vscode_tool_calls"]["tool"]()
+    return []
+
+
+def get_vscode_id_map() -> dict[str, dict]:
+    """Return the tool_call_id → {name, args} mapping from last RLM execution."""
+    if _custom_tools and "_get_vscode_id_map" in _custom_tools:
+        return _custom_tools["_get_vscode_id_map"]["tool"]()
+    return {}
+
+
+def clear_vscode_tool_calls():
+    """Clear pending VS Code tool calls and ID map (call before each RLM run)."""
+    if _custom_tools and "_clear_vscode_tool_calls" in _custom_tools:
+        _custom_tools["_clear_vscode_tool_calls"]["tool"]()
+
+
 def chat(message: str, rlm: Optional[RLM] = None) -> str:
     """Send a message to RLM and return the response string.
 
@@ -88,6 +111,9 @@ def chat(message: str, rlm: Optional[RLM] = None) -> str:
     """
     if rlm is None:
         rlm = get_rlm()
+
+    # Clear VS Code tool call tracker before each run
+    clear_vscode_tool_calls()
 
     try:
         logger.debug("Sending message to RLM: %s...", message[:100])
