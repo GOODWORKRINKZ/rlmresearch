@@ -19,7 +19,7 @@ Plans:
 
 ---
 
-## Phase 2: Multi-Model + Custom Tools
+## Phase 2: Multi-Model + Custom Tools ✅
 **Goal**: DeepSeek Pro для root, Flash для sub-calls, dev tools в REPL
 
 ### Plans
@@ -32,8 +32,10 @@ Plans:
 - [x] 02-04-PLAN.md — Mimo integration with config-driven switching (wave 3)
 
 ### Verification
-- RLM автоматически выбирает модель по сложности задачи
-- Custom tools работают внутри REPL (чтение файлов, запуск pytest)
+- ✅ RLM автоматически выбирает модель по сложности задачи (Pro depth=0, Flash depth=1)
+- ✅ Custom tools работают внутри REPL (чтение файлов, запуск pytest)
+- ✅ VS Code tool definitions stripped before passing to RLM
+- ✅ Mimo backend switchable via ACTIVE_PROVIDER env var
 
 ---
 
