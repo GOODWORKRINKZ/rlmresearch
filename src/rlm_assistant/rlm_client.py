@@ -38,6 +38,18 @@ def _patch_add_context():
         var_name = f"context_{result}"
         if var_name in self.locals:
             self.locals["context"] = self.locals[var_name]
+        # Clean up old versioned context/history vars to prevent pollution.
+        # With persistent=True, old contexts (context_0, context_1, ...) and
+        # histories (history_0, history_1, ...) accumulate forever. The model
+        # sees them and gets confused by stale data from previous requests.
+        to_delete = []
+        for key in list(self.locals.keys()):
+            if key == var_name or key == "context":
+                continue
+            if (key.startswith("context_") or key.startswith("history_")) and key[-1].isdigit():
+                to_delete.append(key)
+        for key in to_delete:
+            del self.locals[key]
         return result
 
     LocalREPL.add_context = _fixed_add_context
