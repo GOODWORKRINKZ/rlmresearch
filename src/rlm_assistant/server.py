@@ -608,11 +608,31 @@ def _stream_direct_response(
 # =============================================================================
 
 
+def _strip_vscode_context(text: str) -> str:
+    """Remove VS Code internal context blocks from message content.
+
+    VS Code injects <context>, <editorContext>, <reminderInstructions>, <userRequest>
+    blocks into messages. These bloat RLM context and confuse the model.
+    Extract just the <userRequest> if present, otherwise strip the blocks.
+    """
+    import re
+    # Try to extract user request first
+    user_req = re.search(r'<userRequest>(.*?)</userRequest>', text, re.DOTALL)
+    if user_req:
+        return user_req.group(1).strip()
+
+    # Otherwise strip all VS Code blocks
+    text = re.sub(r'<context>.*?</context>\s*', '', text, flags=re.DOTALL)
+    text = re.sub(r'<editorContext>.*?</editorContext>\s*', '', text, flags=re.DOTALL)
+    text = re.sub(r'<reminderInstructions>.*?</reminderInstructions>\s*', '', text, flags=re.DOTALL)
+    return text.strip()
+
+
 def _extract_latest_user_message(messages: list[ChatMessage]) -> str:
     """Extract the latest user message content for RLM."""
     for msg in reversed(messages):
         if msg.role == "user" and msg.content:
-            return msg.content
+            return _strip_vscode_context(msg.content)
     return ""
 
 
@@ -621,7 +641,9 @@ def _extract_all_user_messages(messages: list[ChatMessage]) -> str:
     parts = []
     for msg in messages:
         if msg.role == "user" and msg.content:
-            parts.append(msg.content)
+            cleaned = _strip_vscode_context(msg.content)
+            if cleaned:
+                parts.append(cleaned)
     return "\n\n".join(parts) if parts else ""
 
 

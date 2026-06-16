@@ -48,8 +48,33 @@ def map_rlm_tool_call_to_vscode(rlm_call: dict) -> dict:
     }
 
 
+def _strip_vscode_context(text: str) -> str:
+    """Remove VS Code internal context blocks from tool result content.
+
+    VS Code injects <context>, <editorContext>, <reminderInstructions> blocks
+    into tool results. These are irrelevant for RLM and bloat the context.
+    """
+    import re
+    # Remove <context>...</context> blocks
+    text = re.sub(r'<context>.*?</context>\s*', '', text, flags=re.DOTALL)
+    # Remove <editorContext>...</editorContext> blocks
+    text = re.sub(r'<editorContext>.*?</editorContext>\s*', '', text, flags=re.DOTALL)
+    # Remove <reminderInstructions>...</reminderInstructions> blocks
+    text = re.sub(r'<reminderInstructions>.*?</reminderInstructions>\s*', '', text, flags=re.DOTALL)
+    # Remove <userRequest>...</userRequest> blocks (already captured separately)
+    text = re.sub(r'<userRequest>.*?</userRequest>\s*', '', text, flags=re.DOTALL)
+    return text.strip()
+
+
+# Max chars per tool result to keep RLM context manageable
+MAX_TOOL_RESULT_CHARS = 3000
+
+
 def format_tool_results_for_rlm(vscode_messages: list, id_map: dict[str, dict]) -> str:
     """Format VS Code tool result messages into a prompt for RLM.
+
+    Truncates large results and strips VS Code internal context to keep
+    the RLM context window manageable (< 30k chars total).
 
     Args:
         vscode_messages: Messages with role='tool' from VS Code.
@@ -59,6 +84,9 @@ def format_tool_results_for_rlm(vscode_messages: list, id_map: dict[str, dict]) 
         Formatted string for RLM consumption.
     """
     parts = []
+    total_len = 0
+    max_total = 30_000  # Hard cap on total tool results text
+
     for msg in vscode_messages:
         if msg.role != "tool":
             continue
@@ -66,7 +94,23 @@ def format_tool_results_for_rlm(vscode_messages: list, id_map: dict[str, dict]) 
         name = call_info.get("name", "unknown")
         args = call_info.get("args", {})
         content = msg.content or "(no output)"
-        parts.append(f"Result of {name}({json.dumps(args, ensure_ascii=False)}):\n{content}")
+
+        # Strip VS Code internal context blocks
+        content = _strip_vscode_context(content)
+
+        # Truncate individual result
+        if len(content) > MAX_TOOL_RESULT_CHARS:
+            content = content[:MAX_TOOL_RESULT_CHARS] + f"\n... [truncated, {len(content)} chars total]"
+
+        part = f"Result of {name}({json.dumps(args, ensure_ascii=False)}):\n{content}"
+
+        # Check total budget
+        if total_len + len(part) > max_total:
+            parts.append(f"\n... [remaining tool results omitted — {len(vscode_messages) - len(parts)} results total]")
+            break
+        parts.append(part)
+        total_len += len(part)
+
     return "\n\n".join(parts) if parts else "(no tool results)"
 
 
