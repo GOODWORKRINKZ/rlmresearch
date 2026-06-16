@@ -92,6 +92,51 @@ Available VS Code tools:
 - `vscode_read_file(filePath: str, startLine: int = 1, endLine: int = 9999)` — Read file (absolute path).
 - `vscode_edit_file(filePath: str, oldString: str, newString: str)` — Edit file with exact match.
 - `vscode_search(query: str, path: str = '')` — Search workspace.
+- `vscode_askQuestions(questions: list[dict])` — Ask the user interactive questions via VS Code dialog.
+
+### vscode_askQuestions format
+Each question dict has:
+- `header` (str, required): Short identifier shown as question title (max 50 chars)
+- `question` (str, required): The question text (max 200 chars)
+- `options` (list[dict], optional): Predefined answers. Each: `{"label": "text", "description": "details", "recommended": true/false}`
+- `multiSelect` (bool, optional): Allow selecting multiple options
+- `allowFreeformInput` (bool, optional): Allow free text alongside options (default True)
+
+Example — interactive dialogue:
+```repl
+# Ask the user to choose an approach
+vscode_askQuestions([
+    {
+        "header": "Chunking Strategy",
+        "question": "How should we chunk code for RAG indexing?",
+        "options": [
+            {"label": "AST-aware", "description": "Parse functions/classes as units", "recommended": True},
+            {"label": "Fixed tokens", "description": "Split by token count (512 tokens)"},
+            {"label": "Line-based", "description": "Split by line count (50 lines)"}
+        ]
+    },
+    {
+        "header": "Embedding Model",
+        "question": "Which embedding model to use?",
+        "options": [
+            {"label": "all-MiniLM-L6-v2", "description": "Fast, local, 384 dims", "recommended": True},
+            {"label": "text-embedding-3-small", "description": "OpenAI API, 1536 dims"},
+            {"label": "DeepSeek embeddings", "description": "If available from DeepSeek API"}
+        ]
+    }
+])
+answer["content"] = "I need your input on chunking strategy and embedding model before proceeding with the RAG implementation plan."
+answer["ready"] = True
+```
+
+**When to use vscode_askQuestions:**
+- When you need user input to make a design decision
+- When presenting options and asking the user to choose
+- When you need clarification on requirements
+- During discuss-phase workflows (gray areas, domain probes)
+
+**IMPORTANT:** After calling vscode_askQuestions, ALWAYS set answer["ready"] = True.
+The user's answers will come in the next message as tool results.
 
 Example — requesting VS Code tools:
 ```repl
@@ -148,7 +193,14 @@ When to use Mimo consultant:
 1. Read `context` — this is the user's request
 2. Use tools for ALL I/O operations
 3. Use llm_query for analysis/summaries
-4. When done or when VS Code tools are needed, set `answer["content"]` and `answer["ready"] = True`
+4. When done, put the FULL response in `answer["content"]` and set `answer["ready"] = True`
+
+## ⚠️ CRITICAL: How to return content to the user
+- `answer["content"]` = **ONLY** thing the user sees in VS Code
+- `print()` = REPL stdout = visible in server logs ONLY, NOT in VS Code
+- NEVER use `print()` to show results to the user — always use `answer["content"]`
+- `answer["content"]` must contain the COMPLETE response — do NOT summarize with
+  "Presented X items" or "See above". Put the actual items, tables, lists IN the answer.
 """
 
 

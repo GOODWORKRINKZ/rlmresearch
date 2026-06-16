@@ -17,6 +17,7 @@ RLM_TO_VSCODE_TOOL_NAME: dict[str, str] = {
     "vscode_read_file": "read_file",
     "vscode_edit_file": "replace_string_in_file",
     "vscode_search": "semantic_search",
+    "vscode_askQuestions": "vscode_askQuestions",
 }
 
 
@@ -229,6 +230,42 @@ def build_custom_tools(workspace_dir: str, include_local_tools: bool = True) -> 
         """Search workspace via VS Code."""
         return _record_tool_call("vscode_search", {"query": query, "path": path})
 
+    def _vscode_ask_questions(questions: list[dict]) -> str:
+        """Ask the user questions via VS Code interactive dialog.
+
+        Args:
+            questions: List of question dicts, each with:
+                - header (str): Short identifier for the question (max 50 chars)
+                - question (str): The question text (max 200 chars)
+                - options (list[dict], optional): List of {label, description, recommended}
+                - multiSelect (bool, optional): Allow multiple selections
+                - allowFreeformInput (bool, optional): Allow free text (default True)
+
+        Returns:
+            Placeholder string. The actual tool call is deferred to VS Code.
+        """
+        # Validate and clean questions
+        cleaned = []
+        for q in questions:
+            if not isinstance(q, dict):
+                continue
+            item = {
+                "header": str(q.get("header", "Question"))[:50],
+                "question": str(q.get("question", ""))[:200],
+            }
+            if "options" in q:
+                item["options"] = q["options"]
+            if "multiSelect" in q:
+                item["multiSelect"] = bool(q["multiSelect"])
+            if "allowFreeformInput" in q:
+                item["allowFreeformInput"] = bool(q["allowFreeformInput"])
+            cleaned.append(item)
+
+        if not cleaned:
+            return "ERROR: No valid questions provided"
+
+        return _record_tool_call("vscode_askQuestions", {"questions": cleaned})
+
     def get_vscode_tool_calls() -> list[dict]:
         """Return pending VS Code tool calls."""
         return list(_vscode_tool_calls)
@@ -282,6 +319,17 @@ def build_custom_tools(workspace_dir: str, include_local_tools: bool = True) -> 
         "vscode_search": {
             "tool": _vscode_search,
             "description": "Search workspace via VS Code search. Usage: vscode_search('functionName', 'src/')",
+        },
+        "vscode_askQuestions": {
+            "tool": _vscode_ask_questions,
+            "description": (
+                "Ask the user questions via VS Code interactive dialog. "
+                "Use this to gather user input, confirm decisions, or present choices. "
+                "Each question has a header (short ID), question text, and optional options list. "
+                "Returns immediately — the actual dialog is shown by VS Code. "
+                "Usage: vscode_askQuestions([{'header': 'Approach', 'question': 'Which approach?', "
+                "'options': [{'label': 'Option A'}, {'label': 'Option B'}]}])"
+            ),
         },
     })
 
